@@ -1,166 +1,52 @@
+const moment = require("moment-timezone");
 const axios = require('axios');
-const fs = require('fs').promises;
-
-const storageFile = 'user_data.json';
-const axiosStatusFile = 'axios_status.json';
-
-const primaryApiUrl = 'https://jonellccapisprojectv2-a62001f39859.herokuapp.com/api/gptconvo';
-const backupApiUrl = 'https://jonellccapisprojectv2-a62001f39859.herokuapp.com/api/v2/ai';
-
-let isPrimaryApiStable = true;
 
 module.exports.config = {
     name: "ai",
     version: "1.0.0",
-    role: 0,
-    description: "EDUCATIONAL",
-    hasPrefix: false,
-    aliases: ["gpt", "ai"],
-    usages: "[question]",
-    cooldowns: 5,
     hasPermission: 0,
-    commandCategory: "boxchat",
-    usage: "[question]",
+    credits: "api by ericson",//api by ericson
+    description: "Gpt architecture",
     usePrefix: false,
-    cooldowns: 3,
+    commandCategory: "GPT4",
+    cooldowns: 5,
 };
 
 module.exports.run = async function ({ api, event, args }) {
-    const content = encodeURIComponent(args.join(" "));
-    const uid = event.senderID;
-
-    let apiUrl, apiName;
-
-    if (isPrimaryApiStable) {
-        apiUrl = `${primaryApiUrl}?ask=${content}&id=${uid}`;
-        apiName = 'Primary Axios';
-    } else {
-        apiUrl = `${backupApiUrl}?ask=${content}`;
-        apiName = 'Backup Axios';
-    }
-
-    if (!content) return api.sendMessage("Please provide your question.\n\nExample: ai what is the solar system?", event.threadID, event.messageID);
-
     try {
-        api.sendMessage(`🔍 | AI is searching for your answer. Please wait...`, event.threadID, event.messageID);
+        const { messageID, messageReply } = event;
+        let prompt = args.join(' ');
 
-        const response = await axios.get(apiUrl);
-        const result = isPrimaryApiStable ? response.data.response : response.data.message;
-
-        if (!result) {
-            throw new Error("Axios response is undefined");
+        if (messageReply) {
+            const repliedMessage = messageReply.body;
+            prompt = `${repliedMessage} ${prompt}`;
         }
 
-        const userData = await getUserData(uid);
-        userData.requestCount = (userData.requestCount || 0) + 1;
-        userData.responses = userData.responses || [];
-        userData.responses.push({ question: content, response: result });
-        await saveUserData(uid, userData, apiName);
-
-        const totalRequestCount = await getTotalRequestCount();
-        const userNames = await getUserNames(api, uid);
-
-        const responseMessage = `${result}\n\n👤 Question Asked by: ${userNames.join(', ')}\n\n𝐜𝐫𝐞𝐚𝐭𝐞𝐝 𝐲𝐨𝐮𝐫 𝐨𝐰𝐧 𝐁𝐎𝐓 𝐇𝐄𝐑𝐄: https://bingchurchill.onrender.com/`;
-        api.sendMessage(responseMessage, event.threadID, event.messageID);
-
-        await saveAxiosStatus(apiName);
-
-        if (!isPrimaryApiStable) {
-            isPrimaryApiStable = true;
-            api.sendMessage("🔃 | Switching back to the primary Axios. Just please wait.", event.threadID);
+        if (!prompt) {
+            return api.sendMessage('🎀 ʜᴇʟʟᴏ, ɪ ᴀᴍ ɢᴘᴛ-4 ᴛʀᴀɪɴᴇᴅ ʙʏ ᴇʀɪᴄsᴏɴ終.\n\nʜᴏᴡ ᴍᴀʏ ɪ ᴀssɪsᴛ ʏᴏᴜ ᴛᴏᴅᴀʏ?', event.threadID, messageID);
         }
+        api.sendMessage('🗨️ | 𝙶𝚙𝚝-4 𝚒𝚜 𝚜𝚎𝚊𝚛𝚌𝚑𝚒𝚗𝚐, 𝙿𝚕𝚎𝚊𝚜𝚎 𝚠𝚊𝚒𝚝...', event.threadID);
 
+        // Delay
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Adjust the delay time as needed
+
+        const gpt4_api = `https://gpt4withcustommodel.onrender.com/gpt?query=${encodeURIComponent(prompt)}&model=gpt-4-32k-0314`;
+        const manilaTime = moment.tz('Asia/Manila');
+        const formattedDateTime = manilaTime.format('MMMM D, YYYY h:mm A');
+
+        const response = await axios.get(gpt4_api);
+
+        if (response.data && response.data.response) {
+            const generatedText = response.data.response;
+
+            // Ai Answer Here
+            api.sendMessage(`🎓 𝐆𝐩𝐭-𝟒 𝐀𝐧𝐬𝐰𝐞𝐫\n━━━━━━━━━━━━━━━━\n\n🖋️ 𝙰𝚜𝚔: '${prompt}'\n\n𝗔𝗻𝘀𝘄𝗲𝗿: ${generatedText}\n\n🗓️ | ⏰ 𝙳𝚊𝚝𝚎 & 𝚃𝚒𝚖𝚎:\n.⋅ ۵ ${formattedDateTime} ۵ ⋅.\n\n━━━━━━━━━━━━━━━━`, event.threadID, messageID);
+        } else {
+            console.error('API response did not contain expected data:', response.data);
+            api.sendMessage(`❌ An error occurred while generating the text response. Please try again later. Response data: ${JSON.stringify(response.data)}`, event.threadID, messageID);
+        }
     } catch (error) {
-        console.error(error);
-
-        try {
-            api.sendMessage("🔄 | Trying Switching Axios!", event.threadID);
-            const backupResponse = await axios.get(`${backupApiUrl}?ask=${content}`);
-            const backupResult = backupResponse.data.message;
-
-            if (!backupResult) {
-                throw new Error("Backup Axios response is undefined");
-            }
-
-            const userData = await getUserData(uid);
-            userData.requestCount = (userData.requestCount || 0) + 1;
-            userData.responses = userData.responses || [];
-            userData.responses.push({ question: content, response: backupResult });
-            await saveUserData(uid, userData, 'Backup Axios');
-
-            const totalRequestCount = await getTotalRequestCount();
-            const userNames = await getUserNames(api, uid);
-
-            const responseMessage = `${backupResult}\n\n👤 Question Asked by: ${userNames.join(', ')}\n\n𝐂𝐑𝐄𝐀𝐓𝐄 𝐘𝐎𝐔𝐑 𝐎𝐖𝐍 𝐁𝐎𝐓 𝐇𝐄𝐑𝐄: https://bingchurchill.onrender.com/`;
-            api.sendMessage(responseMessage, event.threadID, event.messageID);
-
-            isPrimaryApiStable = false;
-
-            await saveAxiosStatus('Backup Axios');
-
-        } catch (backupError) {
-            console.error(backupError);
-            api.sendMessage("An error occurred while processing your request.", event.threadID);
-
-            await saveAxiosStatus('Unknown');
-        }
+        console.error('Error:', error);
+        api.sendMessage(`❌ An error occurred while generating the text response. Please try again later. Error details: ${error.message}`, event.threadID, event.messageID);
     }
 };
-
-async function getUserData(uid) {
-    try {
-        const data = await fs.readFile(storageFile, 'utf-8');
-        const jsonData = JSON.parse(data);
-        return jsonData[uid] || {};
-    } catch (error) {
-        return {};
-    }
-}
-
-async function saveUserData(uid, data, apiName) {
-    try {
-        const existingData = await getUserData(uid);
-        const newData = { ...existingData, ...data, apiUsed: apiName };
-        const allData = await getAllUserData();
-        allData[uid] = newData;
-        await fs.writeFile(storageFile, JSON.stringify(allData, null, 2), 'utf-8');
-    } catch (error) {
-        console.error('Error saving user data:', error);
-    }
-}
-
-async function getTotalRequestCount() {
-    try {
-        const allData = await getAllUserData();
-        return Object.values(allData).reduce((total, userData) => total + (userData.requestCount || 0), 0);
-    } catch (error) {
-        return 0;
-    }
-}
-
-async function getUserNames(api, uid) {
-    try {
-        const userInfo = await api.getUserInfo([uid]);
-        return Object.values(userInfo).map(user => user.name || `User${uid}`);
-    } catch (error) {
-        console.error('Error getting user names:', error);
-        return [];
-    }
-}
-
-async function getAllUserData() {
-    try {
-        const data = await fs.readFile(storageFile, 'utf-8');
-        return JSON.parse(data) || {};
-    } catch (error) {
-        return {};
-    }
-}
-
-async function saveAxiosStatus(apiName) {
-    try {
-        await fs.writeFile(axiosStatusFile, JSON.stringify({ axiosUsed: apiName }), 'utf-8');
-    } catch (error) {
-        console.error('Error saving Axios status:', error);
-    }
-}
